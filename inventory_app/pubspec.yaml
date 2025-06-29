@@ -11,10 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Flutter icons for iOS style
+  flutter_dotenv: ^5.1.0
   cupertino_icons: ^1.0.8
 
-  # Firebase dependencies
   firebase_core: ^2.30.0
   firebase_auth: ^4.17.0
   cloud_firestore: ^4.15.0
@@ -28,11 +27,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-  # Uncomment and add assets/fonts here if you have any
-  # assets:
-  #   - images/
-  # fonts:
-  #   - family: YourFont
-  #     fonts:
-  #       - asset: fonts/YourFont-Regular.ttf

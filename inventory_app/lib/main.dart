@@ -3,20 +3,22 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load();
 
   if (kIsWeb) {
     await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyCsaq7cDCsRtFnNYTsLyIFwoFbSmtM5uwA",
-        authDomain: "inventory-app-firebase.firebaseapp.com",
-        projectId: "inventory-app-firebase",
-        storageBucket: "inventory-app-firebase.appspot.com",
-        messagingSenderId: "951849016862",
-        appId: "1:951849016862:web:e8f7da7f84900b2a1fd80f",
-        measurementId: "G-4Z6HTQWL9F",
+      options: FirebaseOptions(
+        apiKey: dotenv.env['API_KEY']!,
+        authDomain: dotenv.env['AUTH_DOMAIN'],
+        projectId: dotenv.env['PROJECT_ID']!,
+        storageBucket: dotenv.env['STORAGE_BUCKET'],
+        messagingSenderId: dotenv.env['MESSAGING_SENDER_ID']!,
+        appId: dotenv.env['APP_ID']!,
+        measurementId: dotenv.env['MEASUREMENT_ID'],
       ),
     );
   } else {
@@ -284,7 +286,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                       margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: ListTile(
                         title: Text(data['name']),
-                        subtitle: Text("Quantity: ${data['quantity']}"),
+                        subtitle: Text("Quantity: \${data['quantity']}"),
                         onTap: () => _editItem(doc),
                         trailing: IconButton(
                           icon: Icon(Icons.delete, color: Colors.red),
