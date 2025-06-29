@@ -1,6 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-void main() => runApp(InventoryApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (kIsWeb) {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: "AIzaSyCsaq7cDCsRtFnNYTsLyIFwoFbSmtM5uwA",
+        authDomain: "inventory-app-firebase.firebaseapp.com",
+        projectId: "inventory-app-firebase",
+        storageBucket: "inventory-app-firebase.appspot.com",
+        messagingSenderId: "951849016862",
+        appId: "1:951849016862:web:e8f7da7f84900b2a1fd80f",
+        measurementId: "G-4Z6HTQWL9F",
+      ),
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
+
+  runApp(InventoryApp());
+}
 
 class InventoryApp extends StatelessWidget {
   @override
@@ -9,18 +33,100 @@ class InventoryApp extends StatelessWidget {
       title: 'Inventory Manager',
       theme: ThemeData(
         primarySwatch: Colors.teal,
-        scaffoldBackgroundColor: Color(0xFFEAF7F1), // Light mint green
+        scaffoldBackgroundColor: Color(0xFFEAF7F1),
       ),
-      home: InventoryHomePage(),
+      home: AuthWrapper(),
     );
   }
 }
 
-class InventoryItem {
-  String name;
-  int quantity;
+class AuthWrapper extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.active) {
+          final user = snapshot.data;
+          if (user == null) {
+            return AuthPage();
+          } else {
+            return InventoryHomePage();
+          }
+        } else {
+          return Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+      },
+    );
+  }
+}
 
-  InventoryItem(this.name, this.quantity);
+class AuthPage extends StatefulWidget {
+  @override
+  _AuthPageState createState() => _AuthPageState();
+}
+
+class _AuthPageState extends State<AuthPage> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool isLogin = true;
+
+  Future<void> _authenticate() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    try {
+      if (isLogin) {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } else {
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Auth Error: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Login / Register')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _emailController,
+              decoration: InputDecoration(labelText: 'Email'),
+            ),
+            TextField(
+              controller: _passwordController,
+              decoration: InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _authenticate,
+              child: Text(isLogin ? 'Login' : 'Register'),
+            ),
+            TextButton(
+              onPressed: () => setState(() => isLogin = !isLogin),
+              child: Text(
+                isLogin ? 'Create new account' : 'Already have an account?',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class InventoryHomePage extends StatefulWidget {
@@ -29,33 +135,37 @@ class InventoryHomePage extends StatefulWidget {
 }
 
 class _InventoryHomePageState extends State<InventoryHomePage> {
-  final List<InventoryItem> _items = [];
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController();
 
-  void _addItem() {
+  CollectionReference get inventoryCollection {
+    final user = FirebaseAuth.instance.currentUser;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('inventory');
+  }
+
+  Future<void> _addItem() async {
     String name = _nameController.text.trim();
     int? qty = int.tryParse(_qtyController.text.trim());
 
     if (name.isNotEmpty && qty != null && qty > 0) {
-      setState(() {
-        _items.add(InventoryItem(name, qty));
-      });
+      await inventoryCollection.add({'name': name, 'quantity': qty});
       _nameController.clear();
       _qtyController.clear();
     }
   }
 
-  void _editItem(int index) {
-    InventoryItem item = _items[index];
-    TextEditingController editNameController = TextEditingController(
-      text: item.name,
+  Future<void> _editItem(DocumentSnapshot doc) async {
+    final TextEditingController editNameController = TextEditingController(
+      text: doc['name'],
     );
-    TextEditingController editQtyController = TextEditingController(
-      text: item.quantity.toString(),
+    final TextEditingController editQtyController = TextEditingController(
+      text: doc['quantity'].toString(),
     );
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Edit Item'),
@@ -79,14 +189,13 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             child: Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               String newName = editNameController.text.trim();
               int? newQty = int.tryParse(editQtyController.text.trim());
-
               if (newName.isNotEmpty && newQty != null && newQty > 0) {
-                setState(() {
-                  _items[index].name = newName;
-                  _items[index].quantity = newQty;
+                await inventoryCollection.doc(doc.id).update({
+                  'name': newName,
+                  'quantity': newQty,
                 });
                 Navigator.pop(context);
               }
@@ -98,10 +207,12 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     );
   }
 
-  void _removeItem(int index) {
-    setState(() {
-      _items.removeAt(index);
-    });
+  Future<void> _removeItem(String docId) async {
+    await inventoryCollection.doc(docId).delete();
+  }
+
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
   }
 
   @override
@@ -110,6 +221,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
       appBar: AppBar(
         title: Text('Inventory Manager'),
         backgroundColor: Colors.teal[700],
+        actions: [IconButton(icon: Icon(Icons.logout), onPressed: _logout)],
       ),
       body: Column(
         children: [
@@ -149,30 +261,41 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             ),
           ),
           Expanded(
-            child: _items.isEmpty
-                ? Center(child: Text("No inventory items yet."))
-                : ListView.builder(
-                    itemCount: _items.length,
-                    itemBuilder: (_, index) {
-                      final item = _items[index];
-                      return Card(
-                        color: Colors.white,
-                        margin: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: inventoryCollection.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error loading inventory'));
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
+                  return Center(child: Text("No inventory items yet."));
+                }
+                return ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (_, index) {
+                    final doc = docs[index];
+                    final data = doc.data()! as Map<String, dynamic>;
+                    return Card(
+                      color: Colors.white,
+                      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: ListTile(
+                        title: Text(data['name']),
+                        subtitle: Text("Quantity: ${data['quantity']}"),
+                        onTap: () => _editItem(doc),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _removeItem(doc.id),
                         ),
-                        child: ListTile(
-                          title: Text(item.name),
-                          subtitle: Text("Quantity: ${item.quantity}"),
-                          onTap: () => _editItem(index),
-                          trailing: IconButton(
-                            icon: Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _removeItem(index),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
